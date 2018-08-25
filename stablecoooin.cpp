@@ -5,11 +5,7 @@
 
 #include "stablecoooin.hpp"
 
-namespace jedaaaaaaaaa {
-
-void stablecoooin::create( account_name issuer,
-                    asset        maximum_supply )
-{
+void stablecoooin::create( account_name issuer, asset maximum_supply ) {
     require_auth( _self );
 
     auto sym = maximum_supply.symbol;
@@ -28,9 +24,7 @@ void stablecoooin::create( account_name issuer,
     });
 }
 
-
-void stablecoooin::issue( account_name to, asset quantity, string memo )
-{
+void stablecoooin::issue( account_name to, asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
@@ -46,10 +40,12 @@ void stablecoooin::issue( account_name to, asset quantity, string memo )
     eosio_assert( quantity.amount > 0, "must issue positive quantity" );
 
     eosio_assert( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
-    eosio_assert( quantity.amount <= st.max_supply.amount - st.supply.amount, "quantity exceeds available supply");
 
     statstable.modify( st, 0, [&]( auto& s ) {
        s.supply += quantity;
+       if ( s.supply > s.max_supply ) {
+           s.max_supply = s.supply;
+       }
     });
 
     add_balance( st.issuer, quantity, st.issuer );
@@ -84,10 +80,7 @@ void stablecoooin::transfer( account_name from,
     add_balance( to, quantity, from );
 }
 
-void stablecoooin::burn( account_name from, 
-                    asset quantity, 
-                    string memo )
-{
+void stablecoooin::burn( account_name from, asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
@@ -108,6 +101,7 @@ void stablecoooin::burn( account_name from,
 
     statstable.modify( st, 0, [&]( auto& s ) {
        s.supply -= quantity;
+       s.max_supply -= quantity;
     });
 
     sub_balance( from, quantity );
@@ -144,6 +138,4 @@ void stablecoooin::add_balance( account_name owner, asset value, account_name ra
    }
 }
 
-} /// namespace eosio
-
-EOSIO_ABI( jedaaaaaaaaa::stablecoooin, (create)(issue)(transfer)(burn) )
+EOSIO_ABI( stablecoooin, (create)(issue)(transfer)(burn) )
