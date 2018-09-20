@@ -75,12 +75,13 @@ void stablecoooin::transfer( account_name from,
     eosio_assert( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
 
+    auto payer = has_auth( to ) ? to : from;
 
     sub_balance( from, quantity );
-    add_balance( to, quantity, from );
+    add_balance( to, quantity, payer );
 }
 
-void stablecoooin::burn( account_name from, asset quantity, string memo ) {
+void stablecoooin::burn(asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
@@ -91,10 +92,10 @@ void stablecoooin::burn( account_name from, asset quantity, string memo ) {
     eosio_assert( existing != statstable.end(), "token with symbol does not exist, create token before burn" );
     const auto& st = *existing;
 
-    require_auth( from );
-    require_recipient( from );
+    require_auth( st.issuer );
+    //require_recipient( st.issuer );
     eosio_assert( quantity.is_valid(), "invalid quantity" );
-    eosio_assert( quantity.amount >= 0, "must burn positive or zero quantity" );
+    eosio_assert( quantity.amount > 0, "must burn positive or zero quantity" );
 
     eosio_assert( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
     eosio_assert( quantity.amount <= st.supply.amount, "quantity exceeds available supply");
@@ -104,7 +105,7 @@ void stablecoooin::burn( account_name from, asset quantity, string memo ) {
        s.max_supply -= quantity;
     });
 
-    sub_balance( from, quantity );
+    sub_balance( st.issuer, quantity );
 }
 
 void stablecoooin::sub_balance( account_name owner, asset value ) {

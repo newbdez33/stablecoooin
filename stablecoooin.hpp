@@ -23,7 +23,7 @@ public:
       void create( account_name issuer, asset maximum_supply );
       void issue( account_name to, asset quantity, string memo );
       void transfer( account_name from, account_name to, asset quantity, string memo );
-      void burn( account_name from, asset quantity, string memo );
+      void burn( asset quantity, string memo );
 
       inline asset get_supply( symbol_name sym )const;
       inline asset get_balance( account_name owner, symbol_name sym )const;
