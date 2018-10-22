@@ -132,15 +132,11 @@ void stablecoooin::pause() {
 void stablecoooin::unpause() {
     require_auth( _self );
     pausetable pauset(_self, _self.value);
-    auto itr = pauset.find(1);
-    if (itr != pauset.end()) {
-      pauset.modify(itr, _self, [&](auto& p) {
-        p.paused = false;
-      });
-    } else {
-      pauset.emplace(_self, [&](auto& p) {
-        p.paused = false;
-      });
+    while (pauset.begin() != pauset.end()) {
+      auto itr = pauset.end();
+      itr--;
+      pauset.erase(itr);
+      pausetable pauset(_self, _self.value);
     }
 }
 
