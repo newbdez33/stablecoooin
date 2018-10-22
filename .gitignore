@@ -3,3 +3,4 @@
 .vscode/
 stablecoooin.wasm
 stablecoooin.wast
+/stablecoooin.wast.abi

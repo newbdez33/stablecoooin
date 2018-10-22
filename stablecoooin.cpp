@@ -5,7 +5,8 @@
 
 #include "stablecoooin.hpp"
 
-void stablecoooin::create( account_name issuer, asset maximum_supply ) {
+void stablecoooin::create( name issuer, asset maximum_supply ) {
+
     require_auth( _self );
 
     auto sym = maximum_supply.symbol;
@@ -13,8 +14,8 @@ void stablecoooin::create( account_name issuer, asset maximum_supply ) {
     eosio_assert( maximum_supply.is_valid(), "invalid supply");
     eosio_assert( maximum_supply.amount > 0, "max-supply must be positive");
 
-    stats statstable( _self, sym.name() );
-    auto existing = statstable.find( sym.name() );
+    stats statstable( _self, sym.code().raw() );
+    auto existing = statstable.find( sym.code().raw() );
     eosio_assert( existing == statstable.end(), "token with symbol already exists" );
 
     statstable.emplace( _self, [&]( auto& s ) {
@@ -24,14 +25,13 @@ void stablecoooin::create( account_name issuer, asset maximum_supply ) {
     });
 }
 
-void stablecoooin::issue( account_name to, asset quantity, string memo ) {
+void stablecoooin::issue( name to, asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
 
-    auto sym_name = sym.name();
-    stats statstable( _self, sym_name );
-    auto existing = statstable.find( sym_name );
+    stats statstable( _self, sym.code().raw() );
+    auto existing = statstable.find( sym.code().raw() );
     eosio_assert( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
     const auto& st = *existing;
 
@@ -41,7 +41,7 @@ void stablecoooin::issue( account_name to, asset quantity, string memo ) {
 
     eosio_assert( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
 
-    statstable.modify( st, 0, [&]( auto& s ) {
+    statstable.modify( st, same_payer, [&]( auto& s ) {
        s.supply += quantity;
        if ( s.supply > s.max_supply ) {
            s.max_supply = s.supply;
@@ -51,21 +51,25 @@ void stablecoooin::issue( account_name to, asset quantity, string memo ) {
     add_balance( st.issuer, quantity, st.issuer );
 
     if( to != st.issuer ) {
-       SEND_INLINE_ACTION( *this, transfer, {st.issuer,N(active)}, {st.issuer, to, quantity, memo} );
+       SEND_INLINE_ACTION( *this, transfer, {st.issuer, "active"_n}, {st.issuer, to, quantity, memo} );
     }
 }
 
-void stablecoooin::transfer( account_name from,
-                      account_name to,
-                      asset        quantity,
-                      string       memo )
-{
+void stablecoooin::transfer( name from, name to, asset quantity, string memo ) {
+    eosio_assert( is_paused(), "contract is paused." );
+
+    blacklists blacklistt(_self, _self.value);
+    auto fromexisting = blacklistt.find( from.value );
+    eosio_assert( fromexisting == blacklistt.end(), "account blacklisted(from)" );
+    auto toexisting = blacklistt.find( to.value );
+    eosio_assert( toexisting == blacklistt.end(), "account blacklisted(to)" );
+
     eosio_assert( from != to, "cannot transfer to self" );
     require_auth( from );
     eosio_assert( is_account( to ), "to account does not exist");
-    auto sym = quantity.symbol.name();
-    stats statstable( _self, sym );
-    const auto& st = statstable.get( sym );
+    auto sym = quantity.symbol.code();
+    stats statstable( _self, sym.raw() );
+    const auto& st = statstable.get( sym.raw() );
 
     require_recipient( from );
     require_recipient( to );
@@ -86,9 +90,9 @@ void stablecoooin::burn(asset quantity, string memo ) {
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
 
-    auto sym_name = sym.name();
-    stats statstable( _self, sym_name );
-    auto existing = statstable.find( sym_name );
+    auto sym_name = sym.code();
+    stats statstable( _self, sym_name.raw() );
+    auto existing = statstable.find( sym_name.raw() );
     eosio_assert( existing != statstable.end(), "token with symbol does not exist, create token before burn" );
     const auto& st = *existing;
 
@@ -100,7 +104,7 @@ void stablecoooin::burn(asset quantity, string memo ) {
     eosio_assert( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
     eosio_assert( quantity.amount <= st.supply.amount, "quantity exceeds available supply");
 
-    statstable.modify( st, 0, [&]( auto& s ) {
+    statstable.modify( st, same_payer, [&]( auto& s ) {
        s.supply -= quantity;
        s.max_supply -= quantity;
     });
@@ -108,10 +112,64 @@ void stablecoooin::burn(asset quantity, string memo ) {
     sub_balance( st.issuer, quantity );
 }
 
-void stablecoooin::sub_balance( account_name owner, asset value ) {
-   accounts from_acnts( _self, owner );
+void stablecoooin::pause() {
+    require_auth( _self );
 
-   const auto& from = from_acnts.get( value.symbol.name(), "no balance object found" );
+    pausetable pauset(_self, _self.value);
+    auto itr = pauset.find(1);
+    if (itr != pauset.end()) {
+      pauset.modify(itr, _self, [&](auto& p) {
+        p.paused = true;
+      });
+    } else {
+      pauset.emplace(_self, [&](auto& p) {
+        p.paused = true;
+      });
+    }
+}
+
+void stablecoooin::unpause() {
+    require_auth( _self );
+    pausetable pauset(_self, _self.value);
+    auto itr = pauset.find(1);
+    if (itr != pauset.end()) {
+      pauset.modify(itr, _self, [&](auto& p) {
+        p.paused = false;
+      });
+    } else {
+      pauset.emplace(_self, [&](auto& p) {
+        p.paused = false;
+      });
+    }
+}
+
+void stablecoooin::blacklist( name account, string memo ) {
+    require_auth( _self );
+    eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
+    
+    blacklists blacklistt(_self, _self.value);
+    auto existing = blacklistt.find( account.value );
+    eosio_assert( existing != blacklistt.end(), "blacklist account already exists" );
+
+    blacklistt.emplace( _self, [&]( auto& b ) {
+       b.account = account;
+    });
+}
+
+void stablecoooin::unblacklist( name account) {
+    require_auth( _self );
+
+    blacklists blacklistt(_self, _self.value);
+    auto existing = blacklistt.find( account.value );
+    eosio_assert( existing == blacklistt.end(), "blacklist account not exists" );
+
+    blacklistt.erase(existing);
+}
+
+void stablecoooin::sub_balance( name owner, asset value ) {
+   accounts from_acnts( _self, owner.value );
+
+   const auto& from = from_acnts.get( value.symbol.code().raw(), "no balance object found" );
    eosio_assert( from.balance.amount >= value.amount, "overdrawn balance" );
 
 
@@ -124,19 +182,24 @@ void stablecoooin::sub_balance( account_name owner, asset value ) {
    }
 }
 
-void stablecoooin::add_balance( account_name owner, asset value, account_name ram_payer )
-{
-   accounts to_acnts( _self, owner );
-   auto to = to_acnts.find( value.symbol.name() );
+void stablecoooin::add_balance( name owner, asset value, name ram_payer ) {
+   accounts to_acnts( _self, owner.value );
+   auto to = to_acnts.find( value.symbol.code().raw() );
    if( to == to_acnts.end() ) {
       to_acnts.emplace( ram_payer, [&]( auto& a ){
         a.balance = value;
       });
    } else {
-      to_acnts.modify( to, 0, [&]( auto& a ) {
+      to_acnts.modify( to, same_payer, [&]( auto& a ) {
         a.balance += value;
       });
    }
 }
 
-EOSIO_ABI( stablecoooin, (create)(issue)(transfer)(burn) )
+bool stablecoooin::is_paused() {
+      pausetable pauset(_self, _self.value);
+      bool existing = ( pauset.find( 1 ) == pauset.end() );
+      return existing;
+}
+
+EOSIO_DISPATCH( stablecoooin, (create)(issue)(transfer)(burn)(pause)(unpause)(blacklist)(unblacklist) )

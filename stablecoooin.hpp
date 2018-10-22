@@ -6,70 +6,75 @@
 
 #include <eosiolib/asset.hpp>
 #include <eosiolib/eosio.hpp>
-
 #include <string>
-
-namespace eosiosystem {
-   class system_contract;
-}
 
 using namespace eosio;
 using std::string;
 
-class stablecoooin : public contract {
+class [[eosio::contract("stablecoooin")]] stablecoooin : public contract {
 public:
-      stablecoooin( account_name self ):contract(self){}
-
-      void create( account_name issuer, asset maximum_supply );
-      void issue( account_name to, asset quantity, string memo );
-      void transfer( account_name from, account_name to, asset quantity, string memo );
+      using contract::contract;
+      [[eosio::action]]
+      void create( name issuer, asset maximum_supply );
+      [[eosio::action]]
+      void issue( name to, asset quantity, string memo );
+      [[eosio::action]]
+      void transfer( name from, name to, asset quantity, string memo );
+      [[eosio::action]]
       void burn( asset quantity, string memo );
+      [[eosio::action]]
+      void pause();
+      [[eosio::action]]
+      void unpause();
+      [[eosio::action]]
+      void blacklist( name account, string memo );
+      [[eosio::action]]
+      void unblacklist( name account );
 
-      inline asset get_supply( symbol_name sym )const;
-      inline asset get_balance( account_name owner, symbol_name sym )const;
-      inline asset get_max_supply( symbol_name sym )const;
+      static asset get_supply( name token_contract_account,  symbol_code sym ) {
+            stats statstable( token_contract_account, sym.raw() );
+            const auto& st = statstable.get( sym.raw() );
+            return st.supply;
+      }
+
+      static asset get_balance( name token_contract_account,  name owner, symbol_code sym ) {
+            accounts accountstable( token_contract_account, owner.value );
+            const auto& ac = accountstable.get( sym.raw() );
+            return ac.balance;
+      }
 
 private:
-
-      struct account {
-            asset    balance;
-            uint64_t primary_key()const { return balance.symbol.name(); }
+      struct [[eosio::table]] account {
+            asset       balance;
+            uint64_t primary_key()const { return balance.symbol.code().raw(); }
       };
 
-      struct currency_stats {
-            asset          supply;
-            asset          max_supply;
-            account_name   issuer;
-            uint64_t primary_key()const { return supply.symbol.name(); }
+      struct [[eosio::table]] currency_stats {
+            asset       supply;
+            asset       max_supply;
+            name        issuer;
+            uint64_t primary_key()const { return supply.symbol.code().raw(); }
       };
 
-      typedef eosio::multi_index<N(accounts), account> accounts;
-      typedef eosio::multi_index<N(stat), currency_stats> stats;
-
-      void sub_balance( account_name owner, asset value );
-      void add_balance( account_name owner, asset value, account_name ram_payer );
-
-public:
-      struct transfer_args {
-            account_name  from;
-            account_name  to;
-            asset         quantity;
-            string        memo;
+      struct [[eosio::table]] blacklist_table {
+            name      account;
+            auto primary_key() const {  return account.value;  }
       };
+
+      struct [[eosio::table]] pause_table {
+            uint64_t            id;
+            bool                paused;
+            auto primary_key() const {  return id;  }
+      };
+
+      typedef eosio::multi_index< "accounts"_n, account > accounts;
+      typedef eosio::multi_index< "stat"_n, currency_stats > stats;
+      typedef eosio::multi_index< "blacklists"_n, blacklist_table > blacklists;
+      typedef eosio::multi_index< "pausetable"_n, pause_table > pausetable;
+
+      void sub_balance( name owner, asset value );
+      void add_balance( name owner, asset value, name ram_payer );
+      bool is_paused();
+
       uint64_t const version = 5;
 };
-
-asset stablecoooin::get_supply( symbol_name sym )const {
-      stats statstable( _self, sym );
-      const auto& st = statstable.get( sym );
-      return st.supply;
-}
-
-asset stablecoooin::get_balance( account_name owner, symbol_name sym )const {
-      accounts accountstable( _self, owner );
-      const auto& ac = accountstable.get( sym );
-      return ac.balance;
-}
-
-
-
