@@ -123,6 +123,7 @@ void stablecoooin::pause() {
       });
     } else {
       pauset.emplace(_self, [&](auto& p) {
+        p.id = 1;
         p.paused = true;
       });
     }
