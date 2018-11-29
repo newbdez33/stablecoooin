@@ -5,7 +5,7 @@
 
 #include "stablecoooin.hpp"
 
-void stablecoooin::create( name issuer, asset maximum_supply ) {
+ACTION stablecoooin::create( name issuer, asset maximum_supply ) {
 
     require_auth( _self );
 
@@ -25,7 +25,7 @@ void stablecoooin::create( name issuer, asset maximum_supply ) {
     });
 }
 
-void stablecoooin::issue( name to, asset quantity, string memo ) {
+ACTION stablecoooin::issue( name to, asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
@@ -55,7 +55,7 @@ void stablecoooin::issue( name to, asset quantity, string memo ) {
     }
 }
 
-void stablecoooin::transfer( name from, name to, asset quantity, string memo ) {
+ACTION stablecoooin::transfer( name from, name to, asset quantity, string memo ) {
     eosio_assert( is_paused(), "contract is paused." );
 
     blacklists blacklistt(_self, _self.value);
@@ -85,7 +85,7 @@ void stablecoooin::transfer( name from, name to, asset quantity, string memo ) {
     add_balance( to, quantity, payer );
 }
 
-void stablecoooin::burn(asset quantity, string memo ) {
+ACTION stablecoooin::burn(asset quantity, string memo ) {
     auto sym = quantity.symbol;
     eosio_assert( sym.is_valid(), "invalid symbol name" );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
@@ -112,7 +112,7 @@ void stablecoooin::burn(asset quantity, string memo ) {
     sub_balance( st.issuer, quantity );
 }
 
-void stablecoooin::pause() {
+ACTION stablecoooin::pause() {
     require_auth( _self );
 
     pausetable pauset(_self, _self.value);
@@ -129,7 +129,7 @@ void stablecoooin::pause() {
     }
 }
 
-void stablecoooin::unpause() {
+ACTION stablecoooin::unpause() {
     require_auth( _self );
     pausetable pauset(_self, _self.value);
     while (pauset.begin() != pauset.end()) {
@@ -140,25 +140,25 @@ void stablecoooin::unpause() {
     }
 }
 
-void stablecoooin::blacklist( name account, string memo ) {
+ACTION stablecoooin::blacklist( name account, string memo ) {
     require_auth( _self );
     eosio_assert( memo.size() <= 256, "memo has more than 256 bytes" );
     
     blacklists blacklistt(_self, _self.value);
     auto existing = blacklistt.find( account.value );
-    eosio_assert( existing != blacklistt.end(), "blacklist account already exists" );
+    eosio_assert( existing == blacklistt.end(), "blacklist account already exists" );
 
     blacklistt.emplace( _self, [&]( auto& b ) {
        b.account = account;
     });
 }
 
-void stablecoooin::unblacklist( name account) {
+ACTION stablecoooin::unblacklist( name account) {
     require_auth( _self );
 
     blacklists blacklistt(_self, _self.value);
     auto existing = blacklistt.find( account.value );
-    eosio_assert( existing == blacklistt.end(), "blacklist account not exists" );
+    eosio_assert( existing != blacklistt.end(), "blacklist account not exists" );
 
     blacklistt.erase(existing);
 }

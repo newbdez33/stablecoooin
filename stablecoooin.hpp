@@ -11,25 +11,17 @@
 using namespace eosio;
 using std::string;
 
-class [[eosio::contract("stablecoooin")]] stablecoooin : public contract {
+CONTRACT stablecoooin : public contract {
 public:
       using contract::contract;
-      [[eosio::action]]
-      void create( name issuer, asset maximum_supply );
-      [[eosio::action]]
-      void issue( name to, asset quantity, string memo );
-      [[eosio::action]]
-      void transfer( name from, name to, asset quantity, string memo );
-      [[eosio::action]]
-      void burn( asset quantity, string memo );
-      [[eosio::action]]
-      void pause();
-      [[eosio::action]]
-      void unpause();
-      [[eosio::action]]
-      void blacklist( name account, string memo );
-      [[eosio::action]]
-      void unblacklist( name account );
+      ACTION create( name issuer, asset maximum_supply );
+      ACTION issue( name to, asset quantity, string memo );
+      ACTION transfer( name from, name to, asset quantity, string memo );
+      ACTION burn( asset quantity, string memo );
+      ACTION pause();
+      ACTION unpause();
+      ACTION blacklist( name account, string memo );
+      ACTION unblacklist( name account );
 
       static asset get_supply( name token_contract_account,  symbol_code sym ) {
             stats statstable( token_contract_account, sym.raw() );
@@ -44,24 +36,24 @@ public:
       }
 
 private:
-      struct [[eosio::table]] account {
+      TABLE account {
             asset       balance;
             uint64_t primary_key()const { return balance.symbol.code().raw(); }
       };
 
-      struct [[eosio::table]] currency_stats {
+      TABLE currency_stats {
             asset       supply;
             asset       max_supply;
             name        issuer;
             uint64_t primary_key()const { return supply.symbol.code().raw(); }
       };
 
-      struct [[eosio::table]] blacklist_table {
+      TABLE blacklist_table {
             name      account;
             auto primary_key() const {  return account.value;  }
       };
 
-      struct [[eosio::table]] pause_table {
+      TABLE pause_table {
             uint64_t            id;
             bool                paused;
             auto primary_key() const {  return id;  }
@@ -76,5 +68,4 @@ private:
       void add_balance( name owner, asset value, name ram_payer );
       bool is_paused();
 
-      uint64_t const version = 5;
 };
